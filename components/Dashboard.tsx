@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { AudioLines, Music, Image as ImageIcon, Sparkles, Loader2, Play, Pause, SkipForward, SkipBack, Share2, Download, FileText } from 'lucide-react';
 import { generateSongConcept, generateCoverArt, generateFullLyrics } from '../services/geminiService';
@@ -76,6 +77,24 @@ const Dashboard: React.FC = () => {
         console.error("Failed to generate lyrics", e);
     } finally {
         setIsGeneratingLyrics(false);
+    }
+  };
+
+  const handleDownload = () => {
+    if (generated.coverArtUrl) {
+      const link = document.createElement('a');
+      link.href = generated.coverArtUrl;
+      link.download = `${generated.concept?.title.replace(/\s+/g, '-').toLowerCase() || 'musaix-art'}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
+
+  const handleShare = () => {
+    if (generated.concept) {
+      // Placeholder for share functionality
+      alert(`Shared "${generated.concept.title}" successfully!`);
     }
   };
 
@@ -207,22 +226,72 @@ const Dashboard: React.FC = () => {
                         <Loader2 className="w-8 h-8 text-musaix-accent animate-spin" />
                       </div>
                     )}
-                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4">
-                        <button className="p-2 bg-white/20 backdrop-blur-md rounded-full hover:bg-white/40"><Download className="w-5 h-5 text-white" /></button>
-                        <button className="p-2 bg-white/20 backdrop-blur-md rounded-full hover:bg-white/40"><Share2 className="w-5 h-5 text-white" /></button>
-                    </div>
+                    {generated.coverArtUrl && (
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4">
+                          <button 
+                            onClick={handleDownload}
+                            className="p-3 bg-white/20 backdrop-blur-md rounded-full hover:bg-white/40 hover:scale-110 transition-all text-white shadow-lg"
+                            title="Download Art"
+                          >
+                            <Download className="w-5 h-5" />
+                          </button>
+                          <button 
+                            onClick={handleShare}
+                            className="p-3 bg-white/20 backdrop-blur-md rounded-full hover:bg-white/40 hover:scale-110 transition-all text-white shadow-lg"
+                            title="Share"
+                          >
+                            <Share2 className="w-5 h-5" />
+                          </button>
+                      </div>
+                    )}
                   </div>
                   
                   {/* Player Controls */}
-                  <div className="bg-white/5 backdrop-blur-md rounded-xl p-4 flex items-center justify-between border border-white/5">
-                    <button className="text-gray-400 hover:text-white"><SkipBack className="w-5 h-5" /></button>
-                    <button 
-                        onClick={() => setIsPlaying(!isPlaying)}
-                        className="w-12 h-12 rounded-full bg-white text-black flex items-center justify-center hover:scale-105 transition-transform"
-                    >
-                        {isPlaying ? <Pause className="w-5 h-5 fill-current" /> : <Play className="w-5 h-5 fill-current ml-1" />}
-                    </button>
-                    <button className="text-gray-400 hover:text-white"><SkipForward className="w-5 h-5" /></button>
+                  <div className="bg-white/5 backdrop-blur-md rounded-xl p-4 border border-white/5 relative overflow-hidden group">
+                    {/* Progress Bar */}
+                    <div className="flex items-center justify-between text-xs text-gray-400 font-mono mb-2 relative z-10">
+                        <span>{isPlaying ? '0:12' : '0:00'}</span>
+                        <span>{isPlaying ? '2:45' : '3:30'}</span>
+                    </div>
+                    <div className="h-1 bg-white/10 rounded-full mb-6 overflow-hidden relative z-10">
+                        <div className={`h-full rounded-full bg-gradient-to-r from-musaix-cyan to-musaix-purple transition-all duration-1000 ${isPlaying ? 'w-1/3 shadow-[0_0_10px_#9b51e0]' : 'w-0'}`}></div>
+                    </div>
+
+                    {/* Controls */}
+                    <div className="flex items-center justify-between relative z-10">
+                        <button className="text-gray-400 hover:text-white transition-colors p-2 hover:bg-white/5 rounded-full"><SkipBack className="w-5 h-5" /></button>
+                        
+                        <button 
+                            onClick={() => setIsPlaying(!isPlaying)}
+                            className={`w-16 h-16 rounded-full flex items-center justify-center transition-all duration-500 ${
+                                isPlaying 
+                                ? 'bg-gradient-to-br from-musaix-cyan to-musaix-purple shadow-[0_0_30px_rgba(6,147,227,0.5)] scale-105' 
+                                : 'bg-white text-black hover:scale-105 hover:shadow-[0_0_20px_rgba(255,255,255,0.3)]'
+                            }`}
+                        >
+                            {isPlaying ? (
+                                <Pause className="w-6 h-6 text-white fill-current" />
+                            ) : (
+                                <Play className="w-6 h-6 text-black fill-current ml-1" />
+                            )}
+                        </button>
+
+                        <button className="text-gray-400 hover:text-white transition-colors p-2 hover:bg-white/5 rounded-full"><SkipForward className="w-5 h-5" /></button>
+                    </div>
+
+                    {/* Animated Waveform Background */}
+                    <div className="absolute bottom-0 left-0 right-0 h-24 flex items-end justify-between px-4 opacity-20 pointer-events-none">
+                        {[...Array(32)].map((_, i) => (
+                            <div 
+                                key={i}
+                                className={`w-1 rounded-t-full transition-all duration-300 ${isPlaying ? 'bg-gradient-to-t from-musaix-cyan to-musaix-purple animate-pulse' : 'bg-white/5'}`}
+                                style={{ 
+                                    height: `${20 + Math.random() * 60}%`,
+                                    animationDelay: `${Math.random()}s`
+                                }}
+                            />
+                        ))}
+                    </div>
                   </div>
                 </div>
 
