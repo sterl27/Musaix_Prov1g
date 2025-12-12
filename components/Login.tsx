@@ -72,6 +72,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, onSwitchToSignUp, onClose }) => 
         </div>
 
         <button 
+          type="button"
           onClick={onLogin}
           className="w-full py-3 bg-white/5 border border-white/10 text-white rounded-lg font-medium hover:bg-white/10 transition-colors flex items-center justify-center gap-2"
         >

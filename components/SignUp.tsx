@@ -87,6 +87,7 @@ const SignUp: React.FC<SignUpProps> = ({ onSignUp, onSwitchToLogin, onClose }) =
         </div>
 
         <button 
+          type="button"
           onClick={onSignUp}
           className="w-full py-3 bg-white/5 border border-white/10 text-white rounded-lg font-medium hover:bg-white/10 transition-colors flex items-center justify-center gap-2"
         >

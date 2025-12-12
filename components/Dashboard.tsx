@@ -1,8 +1,8 @@
 
 import React, { useState } from 'react';
-import { AudioLines, Music, Image as ImageIcon, Sparkles, Loader2, Play, Pause, SkipForward, SkipBack, Share2, Download, FileText } from 'lucide-react';
+import { AudioLines, Music, Image as ImageIcon, Sparkles, Loader2, Play, Pause, SkipForward, SkipBack, Share2, Download, FileText, Shuffle, Repeat, Repeat1 } from 'lucide-react';
 import { generateSongConcept, generateCoverArt, generateFullLyrics } from '../services/geminiService';
-import { GeneratedAsset, GenerationStatus } from '../types';
+import { GeneratedAsset, GenerationStatus, SongConcept } from '../types';
 import Visualizer from './Visualizer';
 
 const Dashboard: React.FC = () => {
@@ -11,7 +11,7 @@ const Dashboard: React.FC = () => {
   const [mood, setMood] = useState('Chill');
   const [topic, setTopic] = useState('Late night coding');
   
-  // State
+  // Generation State
   const [generated, setGenerated] = useState<GeneratedAsset>({
     concept: null,
     coverArtUrl: null,
@@ -19,8 +19,15 @@ const Dashboard: React.FC = () => {
     error: null
   });
 
+  // Player State
+  const [playlist, setPlaylist] = useState<Array<{ concept: SongConcept, coverArtUrl: string | null }>>([]);
+  const [currentTrackIndex, setCurrentTrackIndex] = useState<number>(-1);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isGeneratingLyrics, setIsGeneratingLyrics] = useState(false);
+  const [isShuffle, setIsShuffle] = useState(false);
+  const [repeatMode, setRepeatMode] = useState<'none' | 'all' | 'one'>('none');
+
+  const currentTrack = currentTrackIndex >= 0 && currentTrackIndex < playlist.length ? playlist[currentTrackIndex] : null;
 
   const handleGenerate = async () => {
     setGenerated(prev => ({ ...prev, status: GenerationStatus.GENERATING_TEXT, error: null }));
@@ -36,6 +43,17 @@ const Dashboard: React.FC = () => {
 
       // Step 2: Image Generation
       const coverArt = await generateCoverArt(concept.title, concept.style, concept.description);
+      
+      const newTrack = { concept, coverArtUrl: coverArt };
+      
+      // Add to playlist and play
+      setPlaylist(prev => {
+        const newPlaylist = [...prev, newTrack];
+        setCurrentTrackIndex(newPlaylist.length - 1);
+        return newPlaylist;
+      });
+      setIsPlaying(true);
+
       setGenerated(prev => ({ 
         ...prev, 
         coverArtUrl: coverArt, 
@@ -65,14 +83,26 @@ const Dashboard: React.FC = () => {
   };
 
   const handleFullLyrics = async () => {
-    if (!generated.concept) return;
+    if (!currentTrack?.concept) return;
     setIsGeneratingLyrics(true);
     try {
-        const lyrics = await generateFullLyrics(generated.concept);
-        setGenerated(prev => ({
-            ...prev,
-            concept: { ...prev.concept!, lyrics }
-        }));
+        const lyrics = await generateFullLyrics(currentTrack.concept);
+        
+        // Update current track in playlist
+        setPlaylist(prev => {
+            const newPlaylist = [...prev];
+            if (currentTrackIndex >= 0 && newPlaylist[currentTrackIndex]) {
+                newPlaylist[currentTrackIndex] = {
+                    ...newPlaylist[currentTrackIndex],
+                    concept: {
+                        ...newPlaylist[currentTrackIndex].concept,
+                        lyrics
+                    }
+                };
+            }
+            return newPlaylist;
+        });
+
     } catch (e) {
         console.error("Failed to generate lyrics", e);
     } finally {
@@ -81,10 +111,10 @@ const Dashboard: React.FC = () => {
   };
 
   const handleDownload = () => {
-    if (generated.coverArtUrl) {
+    if (currentTrack?.coverArtUrl) {
       const link = document.createElement('a');
-      link.href = generated.coverArtUrl;
-      link.download = `${generated.concept?.title.replace(/\s+/g, '-').toLowerCase() || 'musaix-art'}.png`;
+      link.href = currentTrack.coverArtUrl;
+      link.download = `${currentTrack.concept?.title.replace(/\s+/g, '-').toLowerCase() || 'musaix-art'}.png`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -92,10 +122,47 @@ const Dashboard: React.FC = () => {
   };
 
   const handleShare = () => {
-    if (generated.concept) {
-      // Placeholder for share functionality
-      alert(`Shared "${generated.concept.title}" successfully!`);
+    if (currentTrack?.concept) {
+      alert(`Shared "${currentTrack.concept.title}" successfully!`);
     }
+  };
+
+  // Player Controls
+  const handleNext = () => {
+    if (playlist.length === 0) return;
+    
+    if (isShuffle) {
+        let nextIndex = Math.floor(Math.random() * playlist.length);
+        // Try to not pick the same song if playlist has more than 1
+        if (playlist.length > 1 && nextIndex === currentTrackIndex) {
+             nextIndex = (nextIndex + 1) % playlist.length;
+        }
+        setCurrentTrackIndex(nextIndex);
+    } else {
+        if (currentTrackIndex < playlist.length - 1) {
+            setCurrentTrackIndex(currentTrackIndex + 1);
+        } else if (repeatMode === 'all') {
+            setCurrentTrackIndex(0);
+        }
+    }
+    setIsPlaying(true);
+  };
+
+  const handlePrev = () => {
+    if (playlist.length === 0) return;
+    
+    if (currentTrackIndex > 0) {
+        setCurrentTrackIndex(currentTrackIndex - 1);
+    } else if (repeatMode === 'all') {
+        setCurrentTrackIndex(playlist.length - 1);
+    }
+    setIsPlaying(true);
+  };
+
+  const toggleRepeat = () => {
+    if (repeatMode === 'none') setRepeatMode('all');
+    else if (repeatMode === 'all') setRepeatMode('one');
+    else setRepeatMode('none');
   };
 
   const isLoading = generated.status === GenerationStatus.GENERATING_TEXT || generated.status === GenerationStatus.GENERATING_IMAGE;
@@ -174,7 +241,6 @@ const Dashboard: React.FC = () => {
             </div>
           </div>
 
-          {/* Quick Stats / History could go here */}
           <div className="bg-musaix-card border border-white/10 rounded-2xl p-6">
              <h3 className="text-gray-400 text-sm uppercase tracking-wider mb-4 font-mono">System Status</h3>
              <div className="space-y-3 text-sm">
@@ -187,8 +253,8 @@ const Dashboard: React.FC = () => {
                     <span className="text-green-400">Gemini 3.0 Pro Image</span>
                 </div>
                 <div className="flex justify-between">
-                    <span className="text-gray-500">Audio Engine</span>
-                    <span className="text-gray-500">Simulated</span>
+                    <span className="text-gray-500">Playlist</span>
+                    <span className="text-gray-500">{playlist.length} Tracks</span>
                 </div>
              </div>
           </div>
@@ -209,24 +275,33 @@ const Dashboard: React.FC = () => {
             <div className="absolute top-0 right-0 w-64 h-64 bg-musaix-purple/10 blur-[100px] rounded-full pointer-events-none"></div>
             <div className="absolute bottom-0 left-0 w-64 h-64 bg-musaix-cyan/10 blur-[100px] rounded-full pointer-events-none"></div>
 
-            {!generated.concept ? (
+            {!currentTrack ? (
               <div className="flex flex-col items-center justify-center flex-grow text-gray-500 space-y-4">
-                <AudioLines className="w-16 h-16 opacity-20" />
-                <p>Generate a track to see details</p>
+                {isLoading ? (
+                     <div className="flex flex-col items-center gap-4">
+                        <Loader2 className="w-12 h-12 text-musaix-accent animate-spin" />
+                        <p className="text-lg font-medium animate-pulse">Creating masterpiece...</p>
+                     </div>
+                ) : (
+                    <>
+                        <AudioLines className="w-16 h-16 opacity-20" />
+                        <p>Generate a track to see details</p>
+                    </>
+                )}
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8 relative z-10">
                 {/* Cover Art Section */}
                 <div className="space-y-4">
                   <div className="aspect-square w-full bg-black rounded-xl overflow-hidden shadow-2xl border border-white/5 relative group">
-                    {generated.coverArtUrl ? (
-                      <img src={generated.coverArtUrl} alt="Album Art" className="w-full h-full object-cover" />
+                    {currentTrack.coverArtUrl ? (
+                      <img src={currentTrack.coverArtUrl} alt="Album Art" className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center bg-gray-900">
                         <Loader2 className="w-8 h-8 text-musaix-accent animate-spin" />
                       </div>
                     )}
-                    {generated.coverArtUrl && (
+                    {currentTrack.coverArtUrl && (
                       <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4">
                           <button 
                             onClick={handleDownload}
@@ -253,34 +328,69 @@ const Dashboard: React.FC = () => {
                         <span>{isPlaying ? '0:12' : '0:00'}</span>
                         <span>{isPlaying ? '2:45' : '3:30'}</span>
                     </div>
-                    <div className="h-1 bg-white/10 rounded-full mb-6 overflow-hidden relative z-10">
+                    <div className="h-1 bg-white/10 rounded-full mb-4 overflow-hidden relative z-10">
                         <div className={`h-full rounded-full bg-gradient-to-r from-musaix-cyan to-musaix-purple transition-all duration-1000 ${isPlaying ? 'w-1/3 shadow-[0_0_10px_#9b51e0]' : 'w-0'}`}></div>
                     </div>
 
-                    {/* Controls */}
-                    <div className="flex items-center justify-between relative z-10">
-                        <button className="text-gray-400 hover:text-white transition-colors p-2 hover:bg-white/5 rounded-full"><SkipBack className="w-5 h-5" /></button>
-                        
-                        <button 
-                            onClick={() => setIsPlaying(!isPlaying)}
-                            className={`w-16 h-16 rounded-full flex items-center justify-center transition-all duration-500 ${
-                                isPlaying 
-                                ? 'bg-gradient-to-br from-musaix-cyan to-musaix-purple shadow-[0_0_30px_rgba(6,147,227,0.5)] scale-105' 
-                                : 'bg-white text-black hover:scale-105 hover:shadow-[0_0_20px_rgba(255,255,255,0.3)]'
-                            }`}
-                        >
-                            {isPlaying ? (
-                                <Pause className="w-6 h-6 text-white fill-current" />
-                            ) : (
-                                <Play className="w-6 h-6 text-black fill-current ml-1" />
-                            )}
-                        </button>
+                    {/* Main Controls */}
+                    <div className="flex items-center justify-between relative z-10 mb-2">
+                         {/* Secondary Controls Left */}
+                        <div className="flex items-center gap-2">
+                             <button 
+                                onClick={() => setIsShuffle(!isShuffle)}
+                                className={`p-2 rounded-full transition-colors ${isShuffle ? 'text-musaix-accent hover:text-musaix-accentHover' : 'text-gray-400 hover:text-white'}`}
+                                title="Shuffle"
+                            >
+                                <Shuffle className="w-4 h-4" />
+                            </button>
+                        </div>
 
-                        <button className="text-gray-400 hover:text-white transition-colors p-2 hover:bg-white/5 rounded-full"><SkipForward className="w-5 h-5" /></button>
+                        {/* Playback Controls */}
+                        <div className="flex items-center gap-4">
+                            <button 
+                                onClick={handlePrev}
+                                className="text-gray-300 hover:text-white transition-colors p-2 hover:bg-white/5 rounded-full"
+                            >
+                                <SkipBack className="w-6 h-6 fill-current" />
+                            </button>
+                            
+                            <button 
+                                onClick={() => setIsPlaying(!isPlaying)}
+                                className={`w-14 h-14 rounded-full flex items-center justify-center transition-all duration-300 ${
+                                    isPlaying 
+                                    ? 'bg-gradient-to-br from-musaix-cyan to-musaix-purple shadow-[0_0_20px_rgba(6,147,227,0.4)] scale-105' 
+                                    : 'bg-white text-black hover:scale-105 hover:shadow-[0_0_15px_rgba(255,255,255,0.3)]'
+                                }`}
+                            >
+                                {isPlaying ? (
+                                    <Pause className="w-6 h-6 text-white fill-current" />
+                                ) : (
+                                    <Play className="w-6 h-6 text-black fill-current ml-1" />
+                                )}
+                            </button>
+
+                            <button 
+                                onClick={handleNext}
+                                className="text-gray-300 hover:text-white transition-colors p-2 hover:bg-white/5 rounded-full"
+                            >
+                                <SkipForward className="w-6 h-6 fill-current" />
+                            </button>
+                        </div>
+
+                        {/* Secondary Controls Right */}
+                         <div className="flex items-center gap-2">
+                            <button 
+                                onClick={toggleRepeat}
+                                className={`p-2 rounded-full transition-colors ${repeatMode !== 'none' ? 'text-musaix-accent hover:text-musaix-accentHover' : 'text-gray-400 hover:text-white'}`}
+                                title="Repeat"
+                            >
+                                {repeatMode === 'one' ? <Repeat1 className="w-4 h-4" /> : <Repeat className="w-4 h-4" />}
+                            </button>
+                         </div>
                     </div>
 
                     {/* Animated Waveform Background */}
-                    <div className="absolute bottom-0 left-0 right-0 h-24 flex items-end justify-between px-4 opacity-20 pointer-events-none">
+                    <div className="absolute bottom-0 left-0 right-0 h-16 flex items-end justify-between px-4 opacity-10 pointer-events-none">
                         {[...Array(32)].map((_, i) => (
                             <div 
                                 key={i}
@@ -298,26 +408,31 @@ const Dashboard: React.FC = () => {
                 {/* Track Details */}
                 <div className="flex flex-col gap-4">
                   <div>
-                    <h1 className="text-3xl font-bold font-sans tracking-tight leading-tight gradient-text">
-                        {generated.concept.title}
-                    </h1>
+                    <div className="flex justify-between items-start">
+                        <h1 className="text-3xl font-bold font-sans tracking-tight leading-tight gradient-text line-clamp-2">
+                            {currentTrack.concept.title}
+                        </h1>
+                        <span className="text-xs font-mono text-gray-500 border border-white/10 px-2 py-1 rounded">
+                            {currentTrackIndex + 1}/{playlist.length}
+                        </span>
+                    </div>
                     <p className="text-musaix-accent font-medium mt-1">
-                        {generated.concept.style} • {generated.concept.bpm} BPM • Key of {generated.concept.key}
+                        {currentTrack.concept.style} • {currentTrack.concept.bpm} BPM • Key of {currentTrack.concept.key}
                     </p>
-                    <p className="text-gray-400 text-sm mt-4 leading-relaxed">
-                        {generated.concept.description}
+                    <p className="text-gray-400 text-sm mt-4 leading-relaxed line-clamp-3">
+                        {currentTrack.concept.description}
                     </p>
                   </div>
 
                   {/* Charts */}
-                  <Visualizer data={generated.concept.moodAnalysis} />
+                  <Visualizer data={currentTrack.concept.moodAnalysis} />
                 </div>
               </div>
             )}
           </div>
 
           {/* Lyrics & Composition Data */}
-          {generated.concept && (
+          {currentTrack?.concept && (
              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="bg-musaix-card border border-white/10 rounded-2xl p-6 flex flex-col">
                     <div className="flex items-center justify-between mb-4">
@@ -334,7 +449,7 @@ const Dashboard: React.FC = () => {
                         </button>
                     </div>
                     <div className="space-y-4 font-mono text-sm text-gray-300 max-h-64 overflow-y-auto pr-2 custom-scrollbar flex-grow">
-                        {generated.concept.lyrics.map((line, idx) => (
+                        {currentTrack.concept.lyrics.map((line, idx) => (
                             <p key={idx} className={line === "" ? "h-4" : ""}>{line}</p>
                         ))}
                     </div>
@@ -345,7 +460,7 @@ const Dashboard: React.FC = () => {
                          Composition & Chords
                     </h3>
                     <div className="flex flex-wrap gap-2 mb-6">
-                        {generated.concept.chords.map((chord, idx) => (
+                        {currentTrack.concept.chords.map((chord, idx) => (
                             <span key={idx} className="px-3 py-1.5 bg-white/5 border border-white/10 rounded-md text-musaix-cyan font-mono text-sm">
                                 {chord}
                             </span>
