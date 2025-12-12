@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AudioLines, Music, Image as ImageIcon, Sparkles, Loader2, Play, Pause, SkipForward, SkipBack, Share2, Download, FileText, Shuffle, Repeat, Repeat1 } from 'lucide-react';
 import { generateSongConcept, generateCoverArt, generateFullLyrics } from '../services/geminiService';
 import { GeneratedAsset, GenerationStatus, SongConcept } from '../types';
@@ -26,8 +26,22 @@ const Dashboard: React.FC = () => {
   const [isGeneratingLyrics, setIsGeneratingLyrics] = useState(false);
   const [isShuffle, setIsShuffle] = useState(false);
   const [repeatMode, setRepeatMode] = useState<'none' | 'all' | 'one'>('none');
+  const [waveformHeights, setWaveformHeights] = useState<number[]>(Array(40).fill(10));
 
   const currentTrack = currentTrackIndex >= 0 && currentTrackIndex < playlist.length ? playlist[currentTrackIndex] : null;
+
+  // Waveform Animation Effect
+  useEffect(() => {
+    let interval: any;
+    if (isPlaying) {
+      interval = setInterval(() => {
+        setWaveformHeights(prev => prev.map(() => Math.max(15, Math.random() * 90)));
+      }, 100);
+    } else {
+      setWaveformHeights(Array(40).fill(10));
+    }
+    return () => clearInterval(interval);
+  }, [isPlaying]);
 
   const handleGenerate = async () => {
     setGenerated(prev => ({ ...prev, status: GenerationStatus.GENERATING_TEXT, error: null }));
@@ -64,9 +78,9 @@ const Dashboard: React.FC = () => {
       const errorMessage = err.message || "An unexpected error occurred.";
       
       // Handle specific error for missing/invalid key which might occur if key is revoked or race condition persists
-      if (errorMessage.includes("Requested entity was not found") && window.aistudio) {
+      if (errorMessage.includes("Requested entity was not found") && (window as any).aistudio) {
           try {
-             await window.aistudio.openSelectKey();
+             await (window as any).aistudio.openSelectKey();
              setGenerated(prev => ({ ...prev, status: GenerationStatus.ERROR, error: "API Key refreshed. Please try again." }));
              return;
           } catch(e) {
@@ -329,7 +343,7 @@ const Dashboard: React.FC = () => {
                         <span>{isPlaying ? '2:45' : '3:30'}</span>
                     </div>
                     <div className="h-1 bg-white/10 rounded-full mb-4 overflow-hidden relative z-10">
-                        <div className={`h-full rounded-full bg-gradient-to-r from-musaix-cyan to-musaix-purple transition-all duration-1000 ${isPlaying ? 'w-1/3 shadow-[0_0_10px_#9b51e0]' : 'w-0'}`}></div>
+                        <div className={`h-full rounded-full bg-gradient-to-r from-musaix-cyan via-purple-500 to-musaix-purple transition-all duration-1000 ${isPlaying ? 'w-1/3 shadow-[0_0_15px_rgba(155,81,224,0.6)]' : 'w-0'}`}></div>
                     </div>
 
                     {/* Main Controls */}
@@ -346,32 +360,35 @@ const Dashboard: React.FC = () => {
                         </div>
 
                         {/* Playback Controls */}
-                        <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-6">
                             <button 
                                 onClick={handlePrev}
-                                className="text-gray-300 hover:text-white transition-colors p-2 hover:bg-white/5 rounded-full"
+                                className="text-gray-300 hover:text-white transition-all hover:scale-110 p-2 hover:bg-white/5 rounded-full"
                             >
                                 <SkipBack className="w-6 h-6 fill-current" />
                             </button>
                             
                             <button 
                                 onClick={() => setIsPlaying(!isPlaying)}
-                                className={`w-14 h-14 rounded-full flex items-center justify-center transition-all duration-300 ${
+                                className={`w-16 h-16 rounded-full flex items-center justify-center transition-all duration-500 relative ${
                                     isPlaying 
-                                    ? 'bg-gradient-to-br from-musaix-cyan to-musaix-purple shadow-[0_0_20px_rgba(6,147,227,0.4)] scale-105' 
-                                    : 'bg-white text-black hover:scale-105 hover:shadow-[0_0_15px_rgba(255,255,255,0.3)]'
+                                    ? 'bg-gradient-to-br from-musaix-cyan via-purple-500 to-musaix-purple shadow-[0_0_30px_rgba(208,9,226,0.6)] scale-110' 
+                                    : 'bg-white text-black hover:scale-110 hover:shadow-[0_0_20px_rgba(255,255,255,0.4)]'
                                 }`}
                             >
+                                {isPlaying && (
+                                    <div className="absolute inset-0 rounded-full border border-white/50 animate-ping opacity-30"></div>
+                                )}
                                 {isPlaying ? (
-                                    <Pause className="w-6 h-6 text-white fill-current" />
+                                    <Pause className="w-7 h-7 text-white fill-current" />
                                 ) : (
-                                    <Play className="w-6 h-6 text-black fill-current ml-1" />
+                                    <Play className="w-7 h-7 text-black fill-current ml-1" />
                                 )}
                             </button>
 
                             <button 
                                 onClick={handleNext}
-                                className="text-gray-300 hover:text-white transition-colors p-2 hover:bg-white/5 rounded-full"
+                                className="text-gray-300 hover:text-white transition-all hover:scale-110 p-2 hover:bg-white/5 rounded-full"
                             >
                                 <SkipForward className="w-6 h-6 fill-current" />
                             </button>
@@ -390,14 +407,13 @@ const Dashboard: React.FC = () => {
                     </div>
 
                     {/* Animated Waveform Background */}
-                    <div className="absolute bottom-0 left-0 right-0 h-16 flex items-end justify-between px-4 opacity-10 pointer-events-none">
-                        {[...Array(32)].map((_, i) => (
+                    <div className="absolute bottom-0 left-0 right-0 h-24 flex items-end justify-between px-4 opacity-30 pointer-events-none gap-[2px]">
+                        {waveformHeights.map((height, i) => (
                             <div 
                                 key={i}
-                                className={`w-1 rounded-t-full transition-all duration-300 ${isPlaying ? 'bg-gradient-to-t from-musaix-cyan to-musaix-purple animate-pulse' : 'bg-white/5'}`}
+                                className={`w-1.5 rounded-t-full transition-all duration-200 ease-out ${isPlaying ? 'bg-gradient-to-t from-musaix-cyan to-musaix-purple shadow-[0_0_8px_rgba(208,9,226,0.4)]' : 'bg-white/10'}`}
                                 style={{ 
-                                    height: `${20 + Math.random() * 60}%`,
-                                    animationDelay: `${Math.random()}s`
+                                    height: `${height}%`,
                                 }}
                             />
                         ))}
